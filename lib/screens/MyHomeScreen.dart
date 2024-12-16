@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geminiai/methods/Message.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geminiai/theam/theamState.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 
 class MyHomeScreen extends ConsumerStatefulWidget {
   const MyHomeScreen({super.key});
@@ -12,12 +14,32 @@ class MyHomeScreen extends ConsumerStatefulWidget {
 
 class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
   final TextEditingController _controller = TextEditingController();
-  final List<Message> _message = [
-    Message(text: 'Hi', isUser: true),
-    Message(text: 'hallo , wie gehts ?', isUser: false),
-    Message(text: 'Danke , Super und dir', isUser: true),
-    Message(text: 'Gut', isUser: false),
-  ];
+  final List<Message> _message = [];
+  bool isloding = false;
+
+  callGeminiModel() async {
+    try {
+      if (_controller.text.isNotEmpty) {
+        _message.add(Message(text: _controller.text, isUser: true));
+        isloding = true;
+      }
+
+      final model = GenerativeModel(
+          model: 'gemini-pro', apiKey: dotenv.env['GOOGLE_API_KEY']!);
+      final prompt = _controller.text.trim();
+      final content = [Content.text(prompt)];
+      final respons = await model.generateContent(content);
+
+// from gemini
+      setState(() {
+        _message.add(Message(text: respons.text!, isUser: false));
+        isloding = false;
+      });
+      _controller.clear();
+    } catch (e) {
+      print("e in callGeminiModel : $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,39 +91,48 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
         body: Column(
           children: [
             Expanded(
-              child: ListView.builder(
-                  itemCount: _message.length,
-                  itemBuilder: (ctx, i) {
-                    final message = _message[i];
-                    return ListTile(
-                      title: Align(
-                        alignment: message.isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                                color: message.isUser
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.secondary,
-                                borderRadius: message.isUser
-                                    ? const BorderRadius.only(
-                                        topLeft: Radius.circular(20),
-                                        bottomLeft: Radius.circular(20),
-                                        bottomRight: Radius.circular(20))
-                                    : const BorderRadius.only(
-                                        topRight: Radius.circular(20),
-                                        topLeft: Radius.circular(20),
-                                        bottomRight: Radius.circular(20))),
-                            child: Text(
-                              message.text,
-                              style: message.isUser
-                                  ? Theme.of(context).textTheme.bodyMedium
-                                  : Theme.of(context).textTheme.bodySmall,
-                            )),
+              child: _message.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Schreib Etwas...',
+                        style: Theme.of(context).textTheme.labelMedium,
                       ),
-                    );
-                  }),
+                    )
+                  : ListView.builder(
+                      itemCount: _message.length,
+                      itemBuilder: (ctx, i) {
+                        final message = _message[i];
+                        return ListTile(
+                          title: Align(
+                            alignment: message.isUser
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                    color: message.isUser
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .secondary,
+                                    borderRadius: message.isUser
+                                        ? const BorderRadius.only(
+                                            topLeft: Radius.circular(20),
+                                            bottomLeft: Radius.circular(20),
+                                            bottomRight: Radius.circular(20))
+                                        : const BorderRadius.only(
+                                            topRight: Radius.circular(20),
+                                            topLeft: Radius.circular(20),
+                                            bottomRight: Radius.circular(20))),
+                                child: Text(
+                                  message.text,
+                                  style: message.isUser
+                                      ? Theme.of(context).textTheme.bodyMedium
+                                      : Theme.of(context).textTheme.bodySmall,
+                                )),
+                          ),
+                        );
+                      }),
             ),
 
             //user input
@@ -128,6 +159,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                         controller: _controller,
                         style: Theme.of(context).textTheme.titleSmall,
                         decoration: InputDecoration(
+                            prefix: Padding(padding: EdgeInsets.all(8)),
                             hintText: "Schreib dein NachRecht",
                             hintStyle: Theme.of(context)
                                 .textTheme
@@ -141,20 +173,23 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                     SizedBox(
                       width: w * 0.03,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: GestureDetector(
-                        child: Icon(
-                          Icons.send_rounded,
-                          color: _controller.text.isEmpty
-                              ? Colors.grey
-                              : Colors.blueAccent,
-                        ),
-                        onTap: () {
-                          print('hhh');
-                        },
-                      ),
-                    )
+                    isloding == true
+                        ? Padding(
+                            padding: EdgeInsets.all(16),
+                            child: SizedBox(
+                              width: w * 0.020,
+                              height: h * 0.020,
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: GestureDetector(
+                              child: Icon(Icons.send_rounded,
+                                  color: Colors.blueAccent),
+                              onTap: callGeminiModel,
+                            ),
+                          )
                   ],
                 ),
               ),
